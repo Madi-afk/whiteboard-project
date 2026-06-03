@@ -13,5 +13,30 @@ services:
     command: server /data --console-address ":9001"
     restart: unless-stopped
 
+  backend:
+    build:
+      context: ./backend
+    container_name: whiteboard-backend
+    ports:
+      - "8000:8000"
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: whiteboards
+    depends_on:
+      - minio
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: whiteboard-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   minio_data:
