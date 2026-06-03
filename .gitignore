@@ -13,6 +13,3 @@ dist/
 # System
 .DS_Store
 Thumbs.db
-
-# Frontend dependencies
-frontend/node_modules/
