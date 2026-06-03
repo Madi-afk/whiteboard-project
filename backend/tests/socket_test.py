@@ -3,7 +3,7 @@ import socketio
 
 
 SERVER_URL = "http://localhost:8000"
-ROOM_ID = "demo-room-123"
+ROOM_ID = "550e8400-e29b-41d4-a716-446655440000"
 
 
 async def create_client(user_name: str):
