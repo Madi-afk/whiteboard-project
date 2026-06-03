@@ -1,11 +1,15 @@
 from uuid import UUID
 
+from app.storage import load_board, save_board
+
+
 def is_valid_uuid(value: str) -> bool:
     try:
         UUID(str(value))
         return True
     except (ValueError, TypeError):
         return False
+
 
 def register_socket_events(sio, room_manager):
     @sio.event
@@ -24,7 +28,7 @@ def register_socket_events(sio, room_manager):
                 room=sid,
             )
             return
-        
+
         if not is_valid_uuid(room_id):
             await sio.emit(
                 "server_error",
@@ -43,7 +47,15 @@ def register_socket_events(sio, room_manager):
             },
         )
 
-        snapshot = await room_manager.join_room(sid, room_id, user_name)
+        saved_scene = await load_board(room_id)
+
+        snapshot = await room_manager.join_room(
+            sid=sid,
+            room_id=room_id,
+            user_name=user_name,
+            initial_scene=saved_scene,
+        )
+
         users = await room_manager.get_room_users(room_id)
 
         await sio.emit(
@@ -76,7 +88,6 @@ def register_socket_events(sio, room_manager):
     @sio.event
     async def scene_update(sid, data):
         session = await sio.get_session(sid)
-
         room_id = session.get("room_id")
 
         if not room_id:
@@ -121,8 +132,8 @@ def register_socket_events(sio, room_manager):
         )
 
     @sio.event
-    async def disconnect(sid):
-        room_id, user_name, is_empty = await room_manager.leave_room(sid)
+    async def disconnect(sid, reason=None):
+        room_id, user_name, is_empty, snapshot = await room_manager.leave_room(sid)
 
         if room_id and user_name:
             await sio.emit(
@@ -136,5 +147,13 @@ def register_socket_events(sio, room_manager):
 
             print(f"{user_name} left room {room_id}")
 
-        if is_empty:
-            print(f"Room {room_id} is empty. Memory cleared.")
+        if is_empty and snapshot:
+            await save_board(
+                room_id,
+                {
+                    "elements": snapshot["elements"],
+                    "appState": snapshot["appState"],
+                },
+            )
+
+            print(f"Room {room_id} saved to MinIO and memory cleared.")
