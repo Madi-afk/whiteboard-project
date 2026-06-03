@@ -1,3 +1,12 @@
+from uuid import UUID
+
+def is_valid_uuid(value: str) -> bool:
+    try:
+        UUID(str(value))
+        return True
+    except (ValueError, TypeError):
+        return False
+
 def register_socket_events(sio, room_manager):
     @sio.event
     async def connect(sid, environ, auth=None):
@@ -12,6 +21,14 @@ def register_socket_events(sio, room_manager):
             await sio.emit(
                 "server_error",
                 {"message": "room_id is required"},
+                room=sid,
+            )
+            return
+        
+        if not is_valid_uuid(room_id):
+            await sio.emit(
+                "server_error",
+                {"message": "room_id must be a valid UUID"},
                 room=sid,
             )
             return
