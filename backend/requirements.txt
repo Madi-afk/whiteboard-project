@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+python-socketio
+aiohttp
+python-dotenv
+boto3
