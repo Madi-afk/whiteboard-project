@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CaptureUpdateAction, Excalidraw } from "@excalidraw/excalidraw";
+import { Excalidraw, MainMenu } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 
 import { socket } from "../socket/socket";
@@ -7,7 +7,24 @@ import CursorLayer from "../realtime/CursorLayer";
 
 const ROOM_ID = "11111111-1111-1111-1111-111111111111";
 
-function throttleTrailing(callback, delay) {
+const UI_OPTIONS = {
+  canvasActions: {
+    loadScene: true,
+    saveToActiveFile: true,
+    saveAsImage: true,
+    export: {
+      saveFileToDisk: true,
+    },
+    clearCanvas: true,
+    changeViewBackgroundColor: true,
+    toggleTheme: true,
+  },
+  tools: {
+    image: true,
+  },
+};
+
+function throttle(callback, delay) {
   let lastCall = 0;
   let timer = null;
   let lastArgs = null;
@@ -44,22 +61,31 @@ function throttleTrailing(callback, delay) {
   };
 }
 
+function getUserName() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("name") || `User-${Math.floor(Math.random() * 1000)}`;
+}
+
+function isSocketReady() {
+  return socket.connected && socket.io?.engine?.readyState === "open";
+}
+
 function cleanAppState(appState) {
   return {
     viewBackgroundColor: appState?.viewBackgroundColor || "#ffffff",
   };
 }
 
-function isNewerElement(nextElement, prevElement) {
-  if (!prevElement) return true;
+function isNewerElement(remoteElement, localElement) {
+  if (!localElement) return true;
 
-  const nextVersion = nextElement.version || 0;
-  const prevVersion = prevElement.version || 0;
+  const remoteVersion = remoteElement.version || 0;
+  const localVersion = localElement.version || 0;
 
-  if (nextVersion > prevVersion) return true;
-  if (nextVersion < prevVersion) return false;
+  if (remoteVersion > localVersion) return true;
+  if (remoteVersion < localVersion) return false;
 
-  return (nextElement.updated || 0) > (prevElement.updated || 0);
+  return (remoteElement.updated || 0) > (localElement.updated || 0);
 }
 
 function mergeElements(localElements, remoteElements) {
@@ -81,80 +107,140 @@ function mergeElements(localElements, remoteElements) {
 }
 
 export default function WhiteboardPage() {
-  const [excalidrawAPI, setExcalidrawAPI] = useState(null);
   const [isJoined, setIsJoined] = useState(false);
   const [cursors, setCursors] = useState({});
 
+  const excalidrawAPIRef = useRef(null);
+  const [isApiReady, setIsApiReady] = useState(false);
+
+  const userName = useRef(getUserName());
+
+  const hasJoinedRoom = useRef(false);
+  const hasLoadedInitialScene = useRef(false);
   const isApplyingRemoteUpdate = useRef(false);
-  const userName = useRef(`User-${Math.floor(Math.random() * 1000)}`);
+  const isLocalDrawing = useRef(false);
+  const pendingRemoteScene = useRef(null);
+
+  const setExcalidrawAPIOnce = useCallback((api) => {
+    if (!api) return;
+
+    if (!excalidrawAPIRef.current) {
+      excalidrawAPIRef.current = api;
+      setIsApiReady(true);
+    }
+  }, []);
+
+  const applyRemoteScene = useCallback((data) => {
+    const api = excalidrawAPIRef.current;
+    if (!api) return;
+
+    const localElements =
+      api.getSceneElementsIncludingDeleted?.() || api.getSceneElements();
+
+    const remoteElements = data.elements || [];
+
+    if (localElements.length > 0 && remoteElements.length === 0) {
+      console.warn("Ignored empty remote scene update");
+      return;
+    }
+
+    const mergedElements = mergeElements(localElements, remoteElements);
+
+    isApplyingRemoteUpdate.current = true;
+
+    api.updateScene({
+      elements: mergedElements,
+      appState: data.appState || {},
+    });
+
+    setTimeout(() => {
+      isApplyingRemoteUpdate.current = false;
+    }, 300);
+  }, []);
 
   const sendSceneUpdate = useMemo(() => {
-    return throttleTrailing((elements, appState) => {
-      if (!socket.connected) return;
+    return throttle((elements, appState) => {
+      if (!isSocketReady()) return;
+      if (!hasJoinedRoom.current) return;
 
       socket.emit("scene_update", {
         elements,
         appState: cleanAppState(appState),
       });
-    }, 120);
+    }, 250);
+  }, []);
+
+  const sendPointerUpdate = useMemo(() => {
+    return throttle((pointer, button) => {
+      if (!isSocketReady()) return;
+      if (!hasJoinedRoom.current) return;
+
+      socket.emit("pointer_update", {
+        pointer,
+        button: button || "up",
+      });
+    }, 50);
   }, []);
 
   useEffect(() => {
-    if (!excalidrawAPI) return;
+    if (!isApiReady) return;
 
-    socket.connect();
+    const api = excalidrawAPIRef.current;
+    if (!api) return;
 
-    socket.on("connect", () => {
+    const handleConnect = () => {
       console.log("Connected:", socket.id);
 
       socket.emit("join_room", {
         room_id: ROOM_ID,
         user_name: userName.current,
       });
-    });
+    };
 
-    socket.on("room_joined", (data) => {
+    const handleRoomJoined = (data) => {
       console.log("Room joined:", data);
 
-      isApplyingRemoteUpdate.current = true;
-
-      excalidrawAPI.updateScene({
-        elements: data.scene?.elements || [],
-        appState: data.scene?.appState || {},
-        captureUpdate: CaptureUpdateAction.NEVER,
-      });
-
+      hasJoinedRoom.current = true;
       setIsJoined(true);
 
-      setTimeout(() => {
-        isApplyingRemoteUpdate.current = false;
-      }, 100);
-    });
-
-    socket.on("scene_update", (data) => {
-      if (!excalidrawAPI) return;
+      const currentApi = excalidrawAPIRef.current;
+      if (!currentApi) return;
 
       const localElements =
-        excalidrawAPI.getSceneElementsIncludingDeleted?.() ||
-        excalidrawAPI.getSceneElements();
+        currentApi.getSceneElementsIncludingDeleted?.() ||
+        currentApi.getSceneElements();
 
-      const mergedElements = mergeElements(localElements, data.elements || []);
+      const alreadyHasLocalScene = localElements.length > 0;
 
+      if (hasLoadedInitialScene.current || alreadyHasLocalScene) {
+        hasLoadedInitialScene.current = true;
+        return;
+      }
+
+      hasLoadedInitialScene.current = true;
       isApplyingRemoteUpdate.current = true;
 
-      excalidrawAPI.updateScene({
-        elements: mergedElements,
-        appState: data.appState || {},
-        captureUpdate: CaptureUpdateAction.NEVER,
+      currentApi.updateScene({
+        elements: data.scene?.elements || [],
+        appState: data.scene?.appState || {},
       });
 
       setTimeout(() => {
         isApplyingRemoteUpdate.current = false;
-      }, 100);
-    });
+      }, 300);
+    };
 
-    socket.on("pointer_update", (data) => {
-      if (!data.pointer) return;
+    const handleSceneUpdate = (data) => {
+      if (isLocalDrawing.current) {
+        pendingRemoteScene.current = data;
+        return;
+      }
+
+      applyRemoteScene(data);
+    };
+
+    const handlePointerUpdate = (data) => {
+      if (!data.pointer || !data.user_id) return;
 
       setCursors((prev) => ({
         ...prev,
@@ -163,53 +249,97 @@ export default function WhiteboardPage() {
           pointer: data.pointer,
         },
       }));
-    });
+    };
 
-    socket.on("user_leave", (data) => {
+    const handleUserLeave = (data) => {
       setCursors((prev) => {
         const copy = { ...prev };
         delete copy[data.user_id];
         return copy;
       });
-    });
+    };
 
-    socket.on("server_error", (data) => {
+    const handleServerError = (data) => {
       console.error("Server error:", data);
-    });
+    };
+
+    const handleDisconnect = () => {
+      console.log("Disconnected");
+      hasJoinedRoom.current = false;
+      setIsJoined(false);
+      setCursors({});
+    };
+
+    socket.off("connect");
+    socket.off("room_joined");
+    socket.off("scene_update");
+    socket.off("pointer_update");
+    socket.off("user_leave");
+    socket.off("server_error");
+    socket.off("disconnect");
+
+    socket.on("connect", handleConnect);
+    socket.on("room_joined", handleRoomJoined);
+    socket.on("scene_update", handleSceneUpdate);
+    socket.on("pointer_update", handlePointerUpdate);
+    socket.on("user_leave", handleUserLeave);
+    socket.on("server_error", handleServerError);
+    socket.on("disconnect", handleDisconnect);
+
+    if (!socket.connected && socket.disconnected) {
+      socket.connect();
+    }
 
     return () => {
-      socket.off("connect");
-      socket.off("room_joined");
-      socket.off("scene_update");
-      socket.off("pointer_update");
-      socket.off("user_leave");
-      socket.off("server_error");
-      socket.disconnect();
+      socket.off("connect", handleConnect);
+      socket.off("room_joined", handleRoomJoined);
+      socket.off("scene_update", handleSceneUpdate);
+      socket.off("pointer_update", handlePointerUpdate);
+      socket.off("user_leave", handleUserLeave);
+      socket.off("server_error", handleServerError);
+      socket.off("disconnect", handleDisconnect);
     };
-  }, [excalidrawAPI]);
+  }, [isApiReady, applyRemoteScene]);
 
   const handleChange = useCallback(
     (elements, appState) => {
-      if (!socket.connected) return;
-      if (!isJoined) return;
+      if (!isSocketReady()) return;
+      if (!hasJoinedRoom.current) return;
       if (isApplyingRemoteUpdate.current) return;
 
-      sendSceneUpdate(elements, appState);
+      const api = excalidrawAPIRef.current;
+      const elementsToSend =
+        api?.getSceneElementsIncludingDeleted?.() || elements;
+
+      sendSceneUpdate(elementsToSend, appState);
     },
-    [isJoined, sendSceneUpdate]
+    [sendSceneUpdate]
   );
 
   const handlePointerUpdate = useCallback(
-    (payload) => {
-      if (!socket.connected) return;
-      if (!isJoined) return;
+    (pointerPayload, buttonArg) => {
+      if (!isSocketReady()) return;
+      if (!hasJoinedRoom.current) return;
 
-      socket.emit("pointer_update", {
-        pointer: payload.pointer,
-        button: payload.button,
-      });
+      const pointer = pointerPayload?.pointer || pointerPayload;
+      const button = pointerPayload?.button || buttonArg || "up";
+
+      if (!pointer) return;
+
+      isLocalDrawing.current = button === "down";
+
+      if (button === "up" && pendingRemoteScene.current) {
+        const scene = pendingRemoteScene.current;
+        pendingRemoteScene.current = null;
+
+        setTimeout(() => {
+          applyRemoteScene(scene);
+        }, 100);
+      }
+
+      sendPointerUpdate(pointer, button);
     },
-    [isJoined]
+    [sendPointerUpdate, applyRemoteScene]
   );
 
   return (
@@ -217,9 +347,9 @@ export default function WhiteboardPage() {
       <div
         style={{
           position: "absolute",
-          top: 12,
-          left: 12,
-          zIndex: 10,
+          top: 72,
+          right: 16,
+          zIndex: 30,
           background: "white",
           padding: "8px 12px",
           borderRadius: 8,
@@ -233,11 +363,31 @@ export default function WhiteboardPage() {
       </div>
 
       <Excalidraw
-        excalidrawAPI={(api) => setExcalidrawAPI(api)}
+        excalidrawAPI={setExcalidrawAPIOnce}
         onChange={handleChange}
         onPointerUpdate={handlePointerUpdate}
         isCollaborating={true}
-      />
+        UIOptions={UI_OPTIONS}
+        name="Whiteboard"
+        libraryReturnUrl={window.location.origin + window.location.pathname}
+        langCode="ru-RU"
+      >
+      <MainMenu>
+        <MainMenu.DefaultItems.LoadScene />
+        <MainMenu.DefaultItems.SaveToActiveFile />
+        <MainMenu.DefaultItems.SaveAsImage />
+        <MainMenu.DefaultItems.Export />
+        <MainMenu.DefaultItems.ClearCanvas />
+        <MainMenu.DefaultItems.ChangeCanvasBackground />
+        <MainMenu.DefaultItems.ToggleTheme />
+
+    <MainMenu.ItemLink href="https://github.com/Madi-afk/whiteboard-project">
+      GitHub project
+    </MainMenu.ItemLink>
+
+    <MainMenu.DefaultItems.Help />
+  </MainMenu>
+</Excalidraw>
 
       <CursorLayer cursors={cursors} />
     </div>
