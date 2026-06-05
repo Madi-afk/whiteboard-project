@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from app.auth import get_user_from_token
 from app.storage import load_board, save_board
 
 
@@ -14,12 +15,33 @@ def is_valid_uuid(value: str) -> bool:
 def register_socket_events(sio, room_manager):
     @sio.event
     async def connect(sid, environ, auth=None):
+        token = None
+
+        if isinstance(auth, dict):
+            token = auth.get("token")
+
+        user = get_user_from_token(token)
+
+        await sio.save_session(
+            sid,
+            {
+                "auth_user_name": user["username"] if user else None,
+            },
+        )
+
         print(f"Client connected: {sid}")
 
     @sio.event
     async def join_room(sid, data):
         room_id = data.get("room_id")
-        user_name = data.get("user_name", "Anonymous")
+
+        session = await sio.get_session(sid)
+
+        user_name = (
+            session.get("auth_user_name")
+            or data.get("user_name")
+            or "Anonymous"
+        )
 
         if not room_id:
             await sio.emit(
@@ -39,13 +61,14 @@ def register_socket_events(sio, room_manager):
 
         await sio.enter_room(sid, room_id)
 
-        await sio.save_session(
-            sid,
+        session.update(
             {
                 "room_id": room_id,
                 "user_name": user_name,
-            },
+            }
         )
+
+        await sio.save_session(sid, session)
 
         saved_scene = await load_board(room_id)
 

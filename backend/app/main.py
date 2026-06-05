@@ -4,6 +4,7 @@ import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import init_auth_db, router as auth_router
 from app.sockets import register_socket_events
 from app.state import RoomManager
 from app.storage import ensure_bucket, save_board
@@ -18,6 +19,9 @@ fastapi_app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Auth routes: /auth/register, /auth/login, /auth/me
+fastapi_app.include_router(auth_router)
 
 sio = socketio.AsyncServer(
     async_mode="asgi",
@@ -58,6 +62,7 @@ app = socketio.ASGIApp(
 
 @fastapi_app.on_event("startup")
 async def startup():
+    init_auth_db()
     await ensure_bucket()
     asyncio.create_task(autosave_loop())
 

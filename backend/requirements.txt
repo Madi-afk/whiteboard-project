@@ -4,3 +4,6 @@ python-socketio
 aiohttp
 python-dotenv
 boto3
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart

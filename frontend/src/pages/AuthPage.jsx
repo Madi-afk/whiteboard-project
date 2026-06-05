@@ -1,6 +1,8 @@
 import { useState } from "react";
 import "./AuthPage.css";
 
+const API_URL = `http://${window.location.hostname}:8000`;
+
 const socialProviders = [
   { name: "Facebook", mark: "f", className: "facebook" },
   { name: "GitHub", mark: "GH", className: "github" },
@@ -32,17 +34,83 @@ function AuthDoodle() {
   );
 }
 
-export default function AuthPage() {
+async function registerUser(email, password) {
+  const username = email.split("@")[0].toLowerCase();
+
+  const response = await fetch(`${API_URL}/auth/register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      username,
+      password,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Registration failed");
+  }
+
+  return data;
+}
+
+async function loginUser(email, password) {
+  const username = email.split("@")[0].toLowerCase();
+
+  const formData = new URLSearchParams();
+  formData.append("username", username);
+  formData.append("password", password);
+
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Login failed");
+  }
+
+  return data;
+}
+
+export default function AuthPage({ onAuthSuccess }) {
   const [mode, setMode] = useState("sign-up");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const isSignUp = mode === "sign-up";
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const name = email.split("@")[0] || "User";
-    window.location.href = `/?name=${encodeURIComponent(name)}`;
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const data = isSignUp
+        ? await registerUser(email, password)
+        : await loginUser(email, password);
+
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("username", data.username);
+
+      onAuthSuccess();
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -72,8 +140,8 @@ export default function AuthPage() {
           <h2 id="auth-title">{isSignUp ? "Hi there!" : "Welcome back!"}</h2>
           <p className="auth-subtitle">
             {isSignUp
-              ? "Choose how you want to sign up."
-              : "Choose how you want to sign in."}
+              ? "Create an account to start collaborating."
+              : "Sign in to continue working on your whiteboard."}
           </p>
 
           <p className="auth-label">Continue with</p>
@@ -84,6 +152,8 @@ export default function AuthPage() {
                 key={provider.name}
                 type="button"
                 aria-label={`Continue with ${provider.name}`}
+                disabled
+                title="Social login is not implemented yet"
               >
                 <span className={`social-mark ${provider.className}`}>
                   {provider.mark}
@@ -110,15 +180,42 @@ export default function AuthPage() {
               placeholder="name@example.com"
               required
             />
-            <button type="submit">
-              {isSignUp ? "Passwordless sign-up with email" : "Sign in with email"}
+
+            <label className="email-label" htmlFor="auth-password">
+              Password
+            </label>
+            <input
+              id="auth-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Minimum 6 characters"
+              minLength={6}
+              required
+            />
+
+            {error && (
+              <p style={{ color: "#dc2626", margin: "8px 0", fontSize: 14 }}>
+                {error}
+              </p>
+            )}
+
+            <button type="submit" disabled={isLoading}>
+              {isLoading
+                ? "Please wait..."
+                : isSignUp
+                ? "Sign up with email"
+                : "Sign in with email"}
             </button>
           </form>
 
           <button
             className="auth-switch"
             type="button"
-            onClick={() => setMode(isSignUp ? "sign-in" : "sign-up")}
+            onClick={() => {
+              setError("");
+              setMode(isSignUp ? "sign-in" : "sign-up");
+            }}
           >
             {isSignUp ? "Already have an account?" : "Need an account?"}
           </button>

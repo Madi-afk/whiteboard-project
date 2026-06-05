@@ -25,6 +25,20 @@ const UI_OPTIONS = {
   },
 };
 
+function getStoredToken() {
+  return localStorage.getItem("access_token");
+}
+
+function getStoredUsername() {
+  return localStorage.getItem("username");
+}
+
+function logout() {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("username");
+  window.location.reload();
+}
+
 function SignUpIcon() {
   return (
     <svg
@@ -142,7 +156,7 @@ export default function WhiteboardPage() {
   const excalidrawAPIRef = useRef(null);
   const [isApiReady, setIsApiReady] = useState(false);
 
-  const userName = useRef(getUserName());
+  const userName = useRef(getStoredUsername() || getUserName());
 
   const hasJoinedRoom = useRef(false);
   const hasLoadedInitialScene = useRef(false);
@@ -316,6 +330,10 @@ export default function WhiteboardPage() {
     socket.on("disconnect", handleDisconnect);
 
     if (!socket.connected && socket.disconnected) {
+      socket.auth = {
+        token: getStoredToken(),
+      };
+
       socket.connect();
     }
 
@@ -327,6 +345,9 @@ export default function WhiteboardPage() {
       socket.off("user_leave", handleUserLeave);
       socket.off("server_error", handleServerError);
       socket.off("disconnect", handleDisconnect);
+
+      // Важно: socket.disconnect() здесь НЕ вызываем.
+      // Иначе при перерисовке компонента WebSocket закрывается во время рисования.
     };
   }, [isApiReady, applyRemoteScene]);
 
@@ -389,6 +410,21 @@ export default function WhiteboardPage() {
         <div>Room: {ROOM_ID}</div>
         <div>User: {userName.current}</div>
         <div>Status: {isJoined ? "joined" : "connecting"}</div>
+
+        <button
+          type="button"
+          onClick={logout}
+          style={{
+            marginTop: 8,
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: "1px solid #ddd",
+            background: "white",
+            cursor: "pointer",
+          }}
+        >
+          Logout
+        </button>
       </div>
 
       <Excalidraw
@@ -401,30 +437,30 @@ export default function WhiteboardPage() {
         libraryReturnUrl={window.location.origin + window.location.pathname}
         langCode="ru-RU"
       >
-      <MainMenu>
-        <MainMenu.DefaultItems.LoadScene />
-        <MainMenu.DefaultItems.SaveToActiveFile />
-        <MainMenu.DefaultItems.SaveAsImage />
-        <MainMenu.DefaultItems.Export />
-        <MainMenu.DefaultItems.ClearCanvas />
-        <MainMenu.DefaultItems.ChangeCanvasBackground />
-        <MainMenu.DefaultItems.ToggleTheme />
+        <MainMenu>
+          <MainMenu.DefaultItems.LoadScene />
+          <MainMenu.DefaultItems.SaveToActiveFile />
+          <MainMenu.DefaultItems.SaveAsImage />
+          <MainMenu.DefaultItems.Export />
+          <MainMenu.DefaultItems.ClearCanvas />
+          <MainMenu.DefaultItems.ChangeCanvasBackground />
+          <MainMenu.DefaultItems.ToggleTheme />
 
-        <MainMenu.ItemLink
-          className="whiteboard-signup-menu-item"
-          href="/auth"
-          icon={<SignUpIcon />}
-        >
-          Sign up
-        </MainMenu.ItemLink>
+          <MainMenu.ItemLink
+            className="whiteboard-signup-menu-item"
+            href="/auth"
+            icon={<SignUpIcon />}
+          >
+            Sign up
+          </MainMenu.ItemLink>
 
-    <MainMenu.ItemLink href="https://github.com/Madi-afk/whiteboard-project">
-      GitHub project
-    </MainMenu.ItemLink>
+          <MainMenu.ItemLink href="https://github.com/Madi-afk/whiteboard-project">
+            GitHub project
+          </MainMenu.ItemLink>
 
-    <MainMenu.DefaultItems.Help />
-  </MainMenu>
-</Excalidraw>
+          <MainMenu.DefaultItems.Help />
+        </MainMenu>
+      </Excalidraw>
 
       <CursorLayer cursors={cursors} />
     </div>
