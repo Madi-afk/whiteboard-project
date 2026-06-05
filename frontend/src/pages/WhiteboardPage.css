@@ -1,0 +1,14 @@
+.excalidraw .whiteboard-signup-menu-item {
+  color: #6965db;
+  font-weight: 700;
+}
+
+.excalidraw .whiteboard-signup-menu-item:hover {
+  color: #5b57d1;
+}
+
+.whiteboard-signup-icon {
+  display: block;
+  height: 1.1rem;
+  width: 1.1rem;
+}

@@ -4,6 +4,7 @@ import "@excalidraw/excalidraw/index.css";
 
 import { socket } from "../socket/socket";
 import CursorLayer from "../realtime/CursorLayer";
+import "./WhiteboardPage.css";
 
 const ROOM_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -23,6 +24,34 @@ const UI_OPTIONS = {
     image: true,
   },
 };
+
+function SignUpIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="whiteboard-signup-icon"
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M8 5H5.8A1.8 1.8 0 0 0 4 6.8v10.4A1.8 1.8 0 0 0 5.8 19H8"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M10 12h9m0 0-3.5-3.5M19 12l-3.5 3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
 
 function throttle(callback, delay) {
   let lastCall = 0;
@@ -380,6 +409,14 @@ export default function WhiteboardPage() {
         <MainMenu.DefaultItems.ClearCanvas />
         <MainMenu.DefaultItems.ChangeCanvasBackground />
         <MainMenu.DefaultItems.ToggleTheme />
+
+        <MainMenu.ItemLink
+          className="whiteboard-signup-menu-item"
+          href="/auth"
+          icon={<SignUpIcon />}
+        >
+          Sign up
+        </MainMenu.ItemLink>
 
     <MainMenu.ItemLink href="https://github.com/Madi-afk/whiteboard-project">
       GitHub project
