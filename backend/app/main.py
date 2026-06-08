@@ -1,7 +1,8 @@
 import asyncio
+import os
 
 import socketio
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import init_auth_db, router as auth_router
@@ -9,6 +10,8 @@ from app.sockets import register_socket_events
 from app.state import RoomManager
 from app.storage import ensure_bucket, save_board
 
+
+PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "").strip().rstrip("/")
 
 fastapi_app = FastAPI(title="Whiteboard Backend")
 
@@ -79,4 +82,11 @@ async def root():
 async def health():
     return {
         "status": "healthy",
+    }
+
+
+@fastapi_app.get("/config")
+async def config(request: Request):
+    return {
+        "publicAppUrl": PUBLIC_APP_URL or str(request.base_url).rstrip("/"),
     }

@@ -24,6 +24,7 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: whiteboards
+      PUBLIC_APP_URL: http://10.111.143.20:5173
     depends_on:
       - minio
     restart: unless-stopped

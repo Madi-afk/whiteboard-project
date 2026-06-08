@@ -9,6 +9,7 @@ export default function CursorLayer({ cursors }) {
           className="remote-cursor"
           style={{
             transform: `translate(${user.pointer.x}px, ${user.pointer.y}px)`,
+            "--cursor-color": user.color || "#2563eb",
           }}
         >
           <div className="cursor-arrow" />

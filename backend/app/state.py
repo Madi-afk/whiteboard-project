@@ -66,8 +66,11 @@ class RoomManager:
                 self.rooms[room_id] = RoomState(room_id=room_id)
 
             room = self.rooms[room_id]
-            room.elements = elements
-            room.app_state = app_state
+            room.elements = self._merge_elements(room.elements, elements)
+            room.app_state = {
+                **room.app_state,
+                **(app_state or {}),
+            }
             room.dirty = True
 
             return self._snapshot(room)
@@ -105,3 +108,54 @@ class RoomManager:
                 for sid, user_name in room.users.items()
             ],
         }
+
+    def _merge_elements(self, current_elements, incoming_elements):
+        elements_by_id = {
+            element.get("id"): element
+            for element in current_elements or []
+            if element.get("id")
+        }
+
+        for element in incoming_elements or []:
+            element_id = element.get("id")
+
+            if not element_id:
+                continue
+
+            current = elements_by_id.get(element_id)
+
+            if self._is_newer_element(element, current):
+                elements_by_id[element_id] = element
+
+        return list(elements_by_id.values())
+
+    def _is_newer_element(self, incoming, current):
+        if not current:
+            return True
+
+        incoming_version = incoming.get("version") or 0
+        current_version = current.get("version") or 0
+        incoming_is_deleted = bool(incoming.get("isDeleted"))
+        current_is_deleted = bool(current.get("isDeleted"))
+
+        if (
+            incoming_is_deleted
+            and not current_is_deleted
+            and incoming_version >= current_version
+        ):
+            return True
+
+        if (
+            not incoming_is_deleted
+            and current_is_deleted
+            and incoming_version <= current_version
+        ):
+            return False
+
+        if incoming_version > current_version:
+            return True
+
+        if incoming_version < current_version:
+            return False
+
+        return (incoming.get("updated") or 0) >= (current.get("updated") or 0)

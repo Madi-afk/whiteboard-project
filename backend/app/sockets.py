@@ -101,9 +101,19 @@ def register_socket_events(sio, room_manager):
             {
                 "user_id": sid,
                 "user_name": user_name,
+                "users": users,
             },
             room=room_id,
             skip_sid=sid,
+        )
+
+        await sio.emit(
+            "users_update",
+            {
+                "room_id": room_id,
+                "users": users,
+            },
+            room=room_id,
         )
 
         print(f"{user_name} joined room {room_id}")
@@ -112,12 +122,15 @@ def register_socket_events(sio, room_manager):
     async def scene_update(sid, data):
         session = await sio.get_session(sid)
         room_id = session.get("room_id")
+        user_name = session.get("user_name", "Anonymous")
 
         if not room_id:
             return
 
         elements = data.get("elements", [])
         app_state = data.get("appState", {})
+        pointer = session.get("last_pointer")
+        button = session.get("last_button", "up")
 
         await room_manager.update_scene(room_id, elements, app_state)
 
@@ -125,8 +138,11 @@ def register_socket_events(sio, room_manager):
             "scene_update",
             {
                 "user_id": sid,
+                "user_name": user_name,
                 "elements": elements,
                 "appState": app_state,
+                "pointer": pointer,
+                "button": button,
             },
             room=room_id,
             skip_sid=sid,
@@ -138,17 +154,27 @@ def register_socket_events(sio, room_manager):
 
         room_id = session.get("room_id")
         user_name = session.get("user_name", "Anonymous")
+        pointer = data.get("pointer")
+        button = data.get("button", "up")
 
         if not room_id:
             return
+
+        session.update(
+            {
+                "last_pointer": pointer,
+                "last_button": button,
+            }
+        )
+        await sio.save_session(sid, session)
 
         await sio.emit(
             "pointer_update",
             {
                 "user_id": sid,
                 "user_name": user_name,
-                "pointer": data.get("pointer"),
-                "button": data.get("button", "up"),
+                "pointer": pointer,
+                "button": button,
             },
             room=room_id,
             skip_sid=sid,
@@ -159,11 +185,23 @@ def register_socket_events(sio, room_manager):
         room_id, user_name, is_empty, snapshot = await room_manager.leave_room(sid)
 
         if room_id and user_name:
+            users = snapshot["users"] if snapshot else []
+
             await sio.emit(
                 "user_leave",
                 {
                     "user_id": sid,
                     "user_name": user_name,
+                    "users": users,
+                },
+                room=room_id,
+            )
+
+            await sio.emit(
+                "users_update",
+                {
+                    "room_id": room_id,
+                    "users": users,
                 },
                 room=room_id,
             )

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import "./AuthPage.css";
 
-const API_URL = `http://${window.location.hostname}:8000`;
+const API_URL = "/api";
 
 const socialProviders = [
   { name: "Facebook", mark: "f", className: "facebook" },
