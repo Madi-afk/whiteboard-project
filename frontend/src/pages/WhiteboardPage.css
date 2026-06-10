@@ -19,16 +19,16 @@ body,
   width: 100vw;
 }
 
-.excalidraw .whiteboard-signup-menu-item {
+.excalidraw .whiteboard-create-room-menu-item {
   color: #6965db;
   font-weight: 700;
 }
 
-.excalidraw .whiteboard-signup-menu-item:hover {
+.excalidraw .whiteboard-create-room-menu-item:hover {
   color: #5b57d1;
 }
 
-.whiteboard-signup-icon {
+.whiteboard-create-room-icon {
   display: block;
   height: 1.1rem;
   width: 1.1rem;

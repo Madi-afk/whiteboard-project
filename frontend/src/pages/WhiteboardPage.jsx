@@ -406,6 +406,20 @@ function getChangedElements(elements, sentRevisions) {
   });
 }
 
+function getChangedFiles(files, sentFileIds) {
+  return Object.fromEntries(
+    Object.entries(files || {}).filter(([fileId, file]) => {
+      return file?.id && !sentFileIds.has(fileId);
+    })
+  );
+}
+
+function markFilesAsSent(files, sentFileIds) {
+  for (const fileId of Object.keys(files || {})) {
+    sentFileIds.add(fileId);
+  }
+}
+
 function getViewportState(appState) {
   return {
     zoom: { value: appState?.zoom?.value || 1 },
@@ -446,16 +460,16 @@ function scenePointerToViewportPointer(pointer, viewportState) {
   };
 }
 
-function SignUpIcon() {
+function CreateRoomIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="whiteboard-signup-icon"
+      className="whiteboard-create-room-icon"
       focusable="false"
       viewBox="0 0 24 24"
     >
       <path
-        d="M8 5H5.8A1.8 1.8 0 0 0 4 6.8v10.4A1.8 1.8 0 0 0 5.8 19H8"
+        d="M4 7.5A2.5 2.5 0 0 1 6.5 5h8A2.5 2.5 0 0 1 17 7.5v1"
         fill="none"
         stroke="currentColor"
         strokeLinecap="round"
@@ -463,7 +477,15 @@ function SignUpIcon() {
         strokeWidth="2"
       />
       <path
-        d="M10 12h9m0 0-3.5-3.5M19 12l-3.5 3.5"
+        d="M4 10h16v6.5A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5V10Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M12 12.5v4m-2-2h4"
         fill="none"
         stroke="currentColor"
         strokeLinecap="round"
@@ -502,6 +524,7 @@ export default function WhiteboardPage() {
   const hasLoadedInitialScene = useRef(false);
   const isApplyingRemoteUpdate = useRef(false);
   const sentElementRevisions = useRef(new Map());
+  const sentFileIds = useRef(new Set());
   const lastSentAppState = useRef("");
   const lastPointerButton = useRef("up");
   const laserDownAt = useRef(0);
@@ -624,12 +647,18 @@ export default function WhiteboardPage() {
     const api = excalidrawAPIRef.current;
     if (!api) return;
 
+    const remoteFiles = data.files || {};
     const localElements =
       api.getSceneElementsIncludingDeleted?.() || api.getSceneElements();
 
     const mergedElements = mergeElements(localElements, data.elements || []);
 
     isApplyingRemoteUpdate.current = true;
+
+    if (Object.keys(remoteFiles).length > 0) {
+      api.addFiles?.(Object.values(remoteFiles));
+      markFilesAsSent(remoteFiles, sentFileIds.current);
+    }
 
     api.updateScene({
       elements: mergedElements,
@@ -657,7 +686,7 @@ export default function WhiteboardPage() {
   }, [updateViewportState]);
 
   const sendSceneUpdate = useMemo(() => {
-    return throttle((elements, appState) => {
+    return throttle((elements, appState, files = {}) => {
       if (!isSocketReady()) return;
       if (!hasJoinedRoom.current) return;
 
@@ -666,6 +695,7 @@ export default function WhiteboardPage() {
       socket.emit("scene_update", {
         elements,
         appState: nextAppState,
+        files,
       });
 
       for (const element of elements || []) {
@@ -677,6 +707,7 @@ export default function WhiteboardPage() {
         }
       }
 
+      markFilesAsSent(files, sentFileIds.current);
       lastSentAppState.current = JSON.stringify(nextAppState);
     }, 70);
   }, []);
@@ -767,6 +798,13 @@ export default function WhiteboardPage() {
 
       hasLoadedInitialScene.current = true;
       isApplyingRemoteUpdate.current = true;
+
+      const initialFiles = data.scene?.files || {};
+
+      if (Object.keys(initialFiles).length > 0) {
+        currentApi.addFiles?.(Object.values(initialFiles));
+        markFilesAsSent(initialFiles, sentFileIds.current);
+      }
 
       currentApi.updateScene({
         elements: data.scene?.elements || [],
@@ -877,7 +915,7 @@ export default function WhiteboardPage() {
   }, [isApiReady, applyRemoteScene, setRoomUsers, updateRemoteCursor]);
 
   const handleChange = useCallback(
-    (elements, appState) => {
+    (elements, appState, files) => {
       updateViewportState(appState);
 
       if (!isSocketReady()) return;
@@ -887,20 +925,23 @@ export default function WhiteboardPage() {
       const api = excalidrawAPIRef.current;
       const elementsToSend =
         api?.getSceneElementsIncludingDeleted?.() || elements;
+      const filesToSend = files || api?.getFiles?.() || {};
       const changedElements = getChangedElements(
         elementsToSend,
         sentElementRevisions.current
       );
+      const changedFiles = getChangedFiles(filesToSend, sentFileIds.current);
       const appStateKey = JSON.stringify(cleanAppState(appState));
 
       if (
         changedElements.length === 0 &&
+        Object.keys(changedFiles).length === 0 &&
         appStateKey === lastSentAppState.current
       ) {
         return;
       }
 
-      sendSceneUpdate(changedElements, appState);
+      sendSceneUpdate(changedElements, appState, changedFiles);
     },
     [sendSceneUpdate, updateViewportState]
   );
@@ -1098,6 +1139,10 @@ export default function WhiteboardPage() {
     window.location.assign(getRoomUrl(nextRoomId));
   }, []);
 
+  const createNewRoom = useCallback(() => {
+    window.location.assign(getRoomUrl(createRoomId()));
+  }, []);
+
   const handleClearRoomHistory = useCallback(() => {
     clearRoomHistory();
     setRoomHistory(saveRoomToHistory(roomId.current));
@@ -1278,13 +1323,13 @@ export default function WhiteboardPage() {
           <MainMenu.DefaultItems.ChangeCanvasBackground />
           <MainMenu.DefaultItems.ToggleTheme />
 
-          <MainMenu.ItemLink
-            className="whiteboard-signup-menu-item"
-            href="/auth"
-            icon={<SignUpIcon />}
+          <MainMenu.Item
+            className="whiteboard-create-room-menu-item"
+            icon={<CreateRoomIcon />}
+            onSelect={createNewRoom}
           >
-            Sign up
-          </MainMenu.ItemLink>
+            Создать комнату
+          </MainMenu.Item>
 
           <MainMenu.ItemLink href="https://github.com/Madi-afk/whiteboard-project">
             GitHub project

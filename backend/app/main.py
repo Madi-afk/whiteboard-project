@@ -1,6 +1,5 @@
 import asyncio
 import os
-import urllib.parse
 
 import socketio
 from fastapi import FastAPI, Request
@@ -31,6 +30,7 @@ fastapi_app.include_router(auth_router)
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins="*",
+    max_http_buffer_size=20_000_000,
 )
 
 room_manager = RoomManager()
@@ -52,6 +52,7 @@ async def autosave_loop():
                 {
                     "elements": snapshot["elements"],
                     "appState": snapshot["appState"],
+                    "files": snapshot["files"],
                 },
             )
 
@@ -106,18 +107,6 @@ async def config(request: Request):
 
     if not PUBLIC_APP_URL and PUBLIC_APP_HOSTNAME and should_use_stable_hostname:
         public_app_url = f"{forwarded_proto}://{PUBLIC_APP_HOSTNAME}:5173"
-
-    if keycloak_config.get("enabled"):
-        configured_url = urllib.parse.urlparse(keycloak_config["url"])
-        frontend_host = forwarded_host.split(":")[0]
-
-        if frontend_host:
-            keycloak_scheme = configured_url.scheme or forwarded_proto
-            keycloak_port = configured_url.port or 8080
-            keycloak_config = {
-                **keycloak_config,
-                "url": f"{keycloak_scheme}://{frontend_host}:{keycloak_port}",
-            }
 
     return {
         "publicAppUrl": public_app_url,

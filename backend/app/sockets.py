@@ -90,6 +90,7 @@ def register_socket_events(sio, room_manager):
                 "scene": {
                     "elements": snapshot["elements"],
                     "appState": snapshot["appState"],
+                    "files": snapshot["files"],
                 },
                 "users": users,
             },
@@ -129,10 +130,11 @@ def register_socket_events(sio, room_manager):
 
         elements = data.get("elements", [])
         app_state = data.get("appState", {})
+        files = data.get("files", {})
         pointer = session.get("last_pointer")
         button = session.get("last_button", "up")
 
-        await room_manager.update_scene(room_id, elements, app_state)
+        await room_manager.update_scene(room_id, elements, app_state, files)
 
         await sio.emit(
             "scene_update",
@@ -141,6 +143,7 @@ def register_socket_events(sio, room_manager):
                 "user_name": user_name,
                 "elements": elements,
                 "appState": app_state,
+                "files": files,
                 "pointer": pointer,
                 "button": button,
             },
@@ -214,6 +217,7 @@ def register_socket_events(sio, room_manager):
                 {
                     "elements": snapshot["elements"],
                     "appState": snapshot["appState"],
+                    "files": snapshot["files"],
                 },
             )
 

@@ -9,6 +9,7 @@ class RoomState:
     users: dict[str, str] = field(default_factory=dict)
     elements: list[dict[str, Any]] = field(default_factory=list)
     app_state: dict[str, Any] = field(default_factory=dict)
+    files: dict[str, Any] = field(default_factory=dict)
     dirty: bool = False
 
 
@@ -32,6 +33,7 @@ class RoomManager:
                 if initial_scene:
                     self.rooms[room_id].elements = initial_scene.get("elements", [])
                     self.rooms[room_id].app_state = initial_scene.get("appState", {})
+                    self.rooms[room_id].files = initial_scene.get("files", {})
 
             room = self.rooms[room_id]
             room.users[sid] = user_name
@@ -60,7 +62,7 @@ class RoomManager:
 
             return room_id, user_name, is_empty, snapshot
 
-    async def update_scene(self, room_id: str, elements, app_state):
+    async def update_scene(self, room_id: str, elements, app_state, files=None):
         async with self._lock:
             if room_id not in self.rooms:
                 self.rooms[room_id] = RoomState(room_id=room_id)
@@ -70,6 +72,10 @@ class RoomManager:
             room.app_state = {
                 **room.app_state,
                 **(app_state or {}),
+            }
+            room.files = {
+                **room.files,
+                **(files or {}),
             }
             room.dirty = True
 
@@ -103,6 +109,7 @@ class RoomManager:
             "room_id": room.room_id,
             "elements": room.elements,
             "appState": room.app_state,
+            "files": room.files,
             "users": [
                 {"user_id": sid, "user_name": user_name}
                 for sid, user_name in room.users.items()
