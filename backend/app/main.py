@@ -1,11 +1,12 @@
 import asyncio
 import os
+import urllib.parse
 
 import socketio
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.auth import init_auth_db, router as auth_router
+from app.auth import get_keycloak_public_config, init_auth_db, router as auth_router
 from app.sockets import register_socket_events
 from app.state import RoomManager
 from app.storage import ensure_bucket, save_board
@@ -87,6 +88,34 @@ async def health():
 
 @fastapi_app.get("/config")
 async def config(request: Request):
+    keycloak_config = get_keycloak_public_config()
+    forwarded_proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get(
+        "host",
+        "",
+    )
+    public_app_url = (
+        PUBLIC_APP_URL
+        or (
+            f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+            if forwarded_host
+            else str(request.base_url).rstrip("/")
+        )
+    )
+
+    if keycloak_config.get("enabled"):
+        configured_url = urllib.parse.urlparse(keycloak_config["url"])
+        frontend_host = forwarded_host.split(":")[0]
+
+        if frontend_host:
+            keycloak_scheme = configured_url.scheme or forwarded_proto
+            keycloak_port = configured_url.port or 8080
+            keycloak_config = {
+                **keycloak_config,
+                "url": f"{keycloak_scheme}://{frontend_host}:{keycloak_port}",
+            }
+
     return {
-        "publicAppUrl": PUBLIC_APP_URL or str(request.base_url).rstrip("/"),
+        "publicAppUrl": public_app_url,
+        "keycloak": keycloak_config,
     }

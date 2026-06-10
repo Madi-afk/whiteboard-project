@@ -13,6 +13,33 @@ services:
     command: server /data --console-address ":9001"
     restart: unless-stopped
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: whiteboard-mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: whiteboard-keycloak
+    user: "0"
+    ports:
+      - "8080:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - keycloak_data:/opt/keycloak/data/h2
+      - ./keycloak/whiteboard-realm.json:/opt/keycloak/data/import/whiteboard-realm.json:ro
+    command: start-dev --import-realm
+    depends_on:
+      - mailpit
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -24,9 +51,16 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: whiteboards
-      PUBLIC_APP_URL: http://10.111.143.20:5173
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://10.111.152.226:5173}
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_REALM: whiteboard
+      KEYCLOAK_CLIENT_ID: whiteboard-frontend
+      KEYCLOAK_GOOGLE_ENABLED: "false"
+      KEYCLOAK_GITHUB_ENABLED: "false"
     depends_on:
       - minio
+      - keycloak
     restart: unless-stopped
 
   frontend:
@@ -41,3 +75,4 @@ services:
 
 volumes:
   minio_data:
+  keycloak_data:

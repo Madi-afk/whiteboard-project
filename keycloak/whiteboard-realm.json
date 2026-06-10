@@ -1,0 +1,48 @@
+{
+  "realm": "whiteboard",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": true,
+  "resetPasswordAllowed": true,
+  "smtpServer": {
+    "host": "mailpit",
+    "port": "1025",
+    "from": "whiteboard@localhost",
+    "fromDisplayName": "Whiteboard",
+    "auth": "false",
+    "ssl": "false",
+    "starttls": "false"
+  },
+  "clients": [
+    {
+      "clientId": "whiteboard-frontend",
+      "name": "Whiteboard Frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*",
+        "http://10.111.149.233:5173/*",
+        "http://10.111.152.226:5173/*"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://127.0.0.1:5173/*##http://10.111.149.233:5173/*##http://10.111.152.226:5173/*"
+      },
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://10.111.149.233:5173",
+        "http://10.111.152.226:5173"
+      ]
+    }
+  ]
+}
