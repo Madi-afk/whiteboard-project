@@ -167,6 +167,10 @@ body,
   position: relative;
 }
 
+.collab-history-wrap {
+  position: relative;
+}
+
 .collab-users-button {
   align-items: center;
   background: #fff;
@@ -324,6 +328,155 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.collab-history-popover {
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.18),
+    0 2px 8px rgba(15, 23, 42, 0.06);
+  min-width: 250px;
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 31;
+}
+
+.collab-history-popover::before {
+  background: #fff;
+  border-left: 1px solid rgba(15, 23, 42, 0.12);
+  border-top: 1px solid rgba(15, 23, 42, 0.12);
+  content: "";
+  height: 10px;
+  position: absolute;
+  right: 22px;
+  top: -6px;
+  transform: rotate(45deg);
+  width: 10px;
+}
+
+.collab-history-title {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  font-size: 11px;
+  font-weight: 700;
+  justify-content: space-between;
+  letter-spacing: 0;
+  padding: 5px 7px 9px;
+  text-transform: uppercase;
+}
+
+.collab-history-title strong {
+  background: #f1f5f9;
+  border-radius: 999px;
+  color: #334155;
+  font-size: 11px;
+  min-width: 20px;
+  padding: 3px 7px;
+  text-align: center;
+}
+
+.collab-history-list {
+  display: grid;
+  gap: 3px;
+  max-height: min(320px, 48vh);
+  overflow-y: auto;
+}
+
+.collab-history-row {
+  align-items: center;
+  appearance: none;
+  background: #fff;
+  border: 0;
+  border-radius: 7px;
+  color: #18181b;
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 7px 8px;
+  text-align: left;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+  width: 100%;
+}
+
+.collab-history-row:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.collab-history-row.is-current {
+  background: #eef2ff;
+  color: #4f46e5;
+  cursor: default;
+}
+
+.collab-history-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.collab-history-main strong {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.collab-history-main span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.collab-history-row.is-current .collab-history-main span {
+  color: #4f46e5;
+}
+
+.collab-history-count {
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 999px;
+  color: #64748b;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  height: 22px;
+  justify-content: center;
+  min-width: 22px;
+  padding: 0 7px;
+}
+
+.collab-history-row.is-current .collab-history-count {
+  background: #fff;
+  color: #4f46e5;
+}
+
+.collab-history-clear {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: #64748b;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  height: 32px;
+  margin-top: 6px;
+  width: 100%;
+}
+
+.collab-history-clear:hover {
+  background: #f8fafc;
+  color: #334155;
 }
 
 .collab-status {
@@ -546,6 +699,15 @@ body,
 
   .collab-users-meta {
     display: none;
+  }
+
+  .collab-history-wrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .collab-history-wrap > .collab-button {
+    width: 100%;
   }
 
   .collab-button {

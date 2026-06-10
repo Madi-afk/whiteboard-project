@@ -13,6 +13,7 @@ from app.storage import ensure_bucket, save_board
 
 
 PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "").strip().rstrip("/")
+PUBLIC_APP_HOSTNAME = os.getenv("PUBLIC_APP_HOSTNAME", "").strip()
 
 fastapi_app = FastAPI(title="Whiteboard Backend")
 
@@ -94,14 +95,17 @@ async def config(request: Request):
         "host",
         "",
     )
-    public_app_url = (
-        PUBLIC_APP_URL
-        or (
-            f"{forwarded_proto}://{forwarded_host}".rstrip("/")
-            if forwarded_host
-            else str(request.base_url).rstrip("/")
-        )
+    request_public_url = (
+        f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+        if forwarded_host
+        else str(request.base_url).rstrip("/")
     )
+    request_hostname = forwarded_host.split(":")[0].lower()
+    should_use_stable_hostname = request_hostname in {"localhost", "127.0.0.1", "::1"}
+    public_app_url = PUBLIC_APP_URL or request_public_url
+
+    if not PUBLIC_APP_URL and PUBLIC_APP_HOSTNAME and should_use_stable_hostname:
+        public_app_url = f"{forwarded_proto}://{PUBLIC_APP_HOSTNAME}:5173"
 
     if keycloak_config.get("enabled"):
         configured_url = urllib.parse.urlparse(keycloak_config["url"])

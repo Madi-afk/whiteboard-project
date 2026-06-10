@@ -31,17 +31,23 @@
       "redirectUris": [
         "http://localhost:5173/*",
         "http://127.0.0.1:5173/*",
+        "http://DESKTOP:5173/*",
+        "http://desktop:5173/*",
         "http://10.111.149.233:5173/*",
-        "http://10.111.152.226:5173/*"
+        "http://10.111.152.226:5173/*",
+        "http://10.111.156.72:5173/*"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:5173/*##http://127.0.0.1:5173/*##http://10.111.149.233:5173/*##http://10.111.152.226:5173/*"
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://127.0.0.1:5173/*##http://DESKTOP:5173/*##http://desktop:5173/*##http://10.111.149.233:5173/*##http://10.111.152.226:5173/*##http://10.111.156.72:5173/*"
       },
       "webOrigins": [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://DESKTOP:5173",
+        "http://desktop:5173",
         "http://10.111.149.233:5173",
-        "http://10.111.152.226:5173"
+        "http://10.111.152.226:5173",
+        "http://10.111.156.72:5173"
       ]
     }
   ]

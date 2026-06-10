@@ -51,7 +51,8 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: whiteboards
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://10.111.152.226:5173}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
+      PUBLIC_APP_HOSTNAME: ${PUBLIC_APP_HOSTNAME:-}
       KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_REALM: whiteboard

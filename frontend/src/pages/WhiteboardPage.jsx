@@ -46,11 +46,15 @@ const UI_OPTIONS = {
   },
 };
 
-const LASER_TRAIL_MAX_POINTS = 22;
+const LASER_TRAIL_MAX_POINTS = 24;
+const LASER_CLICK_VISIBLE_MS = 140;
+const POINTER_THROTTLE_MS = 24;
 const AUTH_PROVIDER_KEY = "auth_provider";
 const KEYCLOAK_ID_TOKEN_KEY = "keycloak_id_token";
 const EXCALIDRAW_LIBRARY_MIME_TYPE = "application/vnd.excalidrawlib+json";
 const CONFIG_TIMEOUT_MS = 5000;
+const ROOM_HISTORY_KEY = "whiteboard_room_history";
+const ROOM_HISTORY_LIMIT = 10;
 const AUTH_CALLBACK_PARAMS = [
   "code",
   "error",
@@ -195,6 +199,66 @@ function getRoomUrl(roomId, shareOrigin = window.location.origin) {
   return url.toString();
 }
 
+function readRoomHistory() {
+  try {
+    const parsedHistory = JSON.parse(
+      localStorage.getItem(ROOM_HISTORY_KEY) || "[]"
+    );
+
+    if (!Array.isArray(parsedHistory)) {
+      return [];
+    }
+
+    return parsedHistory
+      .filter((room) => isValidRoomId(room?.roomId))
+      .map((room) => ({
+        roomId: room.roomId,
+        shortId: room.shortId || room.roomId.slice(0, 8),
+        lastVisitedAt: Number(room.lastVisitedAt) || Date.now(),
+        visitCount: Number(room.visitCount) || 1,
+      }))
+      .sort((a, b) => b.lastVisitedAt - a.lastVisitedAt)
+      .slice(0, ROOM_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function writeRoomHistory(history) {
+  localStorage.setItem(
+    ROOM_HISTORY_KEY,
+    JSON.stringify(history.slice(0, ROOM_HISTORY_LIMIT))
+  );
+}
+
+function saveRoomToHistory(roomId) {
+  if (!isValidRoomId(roomId)) {
+    return readRoomHistory();
+  }
+
+  const now = Date.now();
+  const currentHistory = readRoomHistory();
+  const previousRoom = currentHistory.find((room) => room.roomId === roomId);
+  const nextRoom = {
+    roomId,
+    shortId: roomId.slice(0, 8),
+    lastVisitedAt: now,
+    visitCount: (previousRoom?.visitCount || 0) + 1,
+  };
+  const nextHistory = [
+    nextRoom,
+    ...currentHistory.filter((room) => room.roomId !== roomId),
+  ].slice(0, ROOM_HISTORY_LIMIT);
+
+  writeRoomHistory(nextHistory);
+  return nextHistory;
+}
+
+function clearRoomHistory() {
+  localStorage.removeItem(ROOM_HISTORY_KEY);
+  return [];
+}
+
 async function getShareOrigin() {
   try {
     const response = await fetch("/api/config");
@@ -227,6 +291,43 @@ function getUserColor(userId) {
 
 function getInitials(name) {
   return (name || "U").trim().slice(0, 2).toUpperCase();
+}
+
+function formatRoomVisitedAt(timestamp) {
+  const value = Number(timestamp);
+
+  if (!value) {
+    return "Recently";
+  }
+
+  const secondsAgo = Math.max(0, Math.floor((Date.now() - value) / 1000));
+
+  if (secondsAgo < 60) {
+    return "Just now";
+  }
+
+  const minutesAgo = Math.floor(secondsAgo / 60);
+
+  if (minutesAgo < 60) {
+    return `${minutesAgo}m ago`;
+  }
+
+  const hoursAgo = Math.floor(minutesAgo / 60);
+
+  if (hoursAgo < 24) {
+    return `${hoursAgo}h ago`;
+  }
+
+  const daysAgo = Math.floor(hoursAgo / 24);
+
+  if (daysAgo < 7) {
+    return `${daysAgo}d ago`;
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
 }
 
 function formatDownloads(value) {
@@ -387,6 +488,8 @@ export default function WhiteboardPage() {
   const [failedTopLibrary, setFailedTopLibrary] = useState(null);
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
   const [isUsersListOpen, setIsUsersListOpen] = useState(false);
+  const [isRoomHistoryOpen, setIsRoomHistoryOpen] = useState(false);
+  const [roomHistory, setRoomHistory] = useState(() => readRoomHistory());
 
   const excalidrawAPIRef = useRef(null);
   const libraryInputRef = useRef(null);
@@ -400,6 +503,9 @@ export default function WhiteboardPage() {
   const isApplyingRemoteUpdate = useRef(false);
   const sentElementRevisions = useRef(new Map());
   const lastSentAppState = useRef("");
+  const lastPointerButton = useRef("up");
+  const laserDownAt = useRef(0);
+  const pendingLaserUpTimer = useRef(null);
 
   const usersWithColors = useMemo(() => {
     return users.map((user) => ({
@@ -424,6 +530,8 @@ export default function WhiteboardPage() {
     return next;
   }, [cursors, viewportState]);
 
+  const canClearRoomHistory = roomHistory.length > 1;
+
   const setExcalidrawAPIOnce = useCallback((api) => {
     if (!api) return;
 
@@ -432,6 +540,10 @@ export default function WhiteboardPage() {
       setViewportState(getViewportState(api.getAppState?.()));
       setIsApiReady(true);
     }
+  }, []);
+
+  useEffect(() => {
+    setRoomHistory(saveRoomToHistory(roomId.current));
   }, []);
 
   const setRoomUsers = useCallback((nextUsers) => {
@@ -466,16 +578,19 @@ export default function WhiteboardPage() {
         return prev;
       }
 
+      const button = data.button || current?.button || "up";
+      const isActiveLaser = pointer.tool === "laser" && button === "down";
+
       return {
         ...prev,
         [data.user_id]: {
           user_name: data.user_name || current?.user_name || "User",
           pointer,
-          button: data.button || current?.button || "up",
+          button,
           color: current?.color || getUserColor(data.user_id),
           lastSeen: Date.now(),
           trail:
-            pointer.tool === "laser"
+            isActiveLaser
               ? [
                   ...(current?.trail || []),
                   {
@@ -566,16 +681,30 @@ export default function WhiteboardPage() {
     }, 70);
   }, []);
 
+  const emitPointerUpdate = useCallback((pointer, button) => {
+    if (!isSocketReady()) return;
+    if (!hasJoinedRoom.current) return;
+
+    socket.emit("pointer_update", {
+      pointer,
+      button: button || "up",
+    });
+  }, []);
+
   const sendPointerUpdate = useMemo(() => {
     return throttle((pointer, button) => {
-      if (!isSocketReady()) return;
-      if (!hasJoinedRoom.current) return;
+      if ((button || "up") !== lastPointerButton.current) return;
 
-      socket.emit("pointer_update", {
-        pointer,
-        button: button || "up",
-      });
-    }, 25);
+      emitPointerUpdate(pointer, button);
+    }, POINTER_THROTTLE_MS);
+  }, [emitPointerUpdate]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingLaserUpTimer.current) {
+        window.clearTimeout(pendingLaserUpTimer.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -620,6 +749,7 @@ export default function WhiteboardPage() {
       setIsJoined(true);
       setConnectionLabel("live");
       setRoomUsers(data.users);
+      setRoomHistory(saveRoomToHistory(data.room_id || roomId.current));
 
       const currentApi = excalidrawAPIRef.current;
       if (!currentApi) return;
@@ -778,9 +908,59 @@ export default function WhiteboardPage() {
   const handlePointerUpdate = useCallback(
     (data) => {
       if (!data?.pointer) return;
-      sendPointerUpdate(data.pointer, data.button);
+
+      const nextButton = data.button || "up";
+      const isLaser = data.pointer.tool === "laser";
+
+      if (pendingLaserUpTimer.current && isLaser && nextButton === "up") {
+        return;
+      }
+
+      if (nextButton !== lastPointerButton.current) {
+        if (pendingLaserUpTimer.current) {
+          window.clearTimeout(pendingLaserUpTimer.current);
+          pendingLaserUpTimer.current = null;
+        }
+
+        if (isLaser && nextButton === "down") {
+          laserDownAt.current = performance.now();
+          lastPointerButton.current = nextButton;
+          emitPointerUpdate(data.pointer, nextButton);
+          return;
+        }
+
+        if (
+          isLaser &&
+          nextButton === "up" &&
+          lastPointerButton.current === "down"
+        ) {
+          const elapsed = performance.now() - laserDownAt.current;
+          const delay = Math.max(0, LASER_CLICK_VISIBLE_MS - elapsed);
+
+          lastPointerButton.current = nextButton;
+
+          if (delay > 0) {
+            const pointer = data.pointer;
+
+            pendingLaserUpTimer.current = window.setTimeout(() => {
+              pendingLaserUpTimer.current = null;
+              emitPointerUpdate(pointer, "up");
+            }, delay);
+            return;
+          }
+
+          emitPointerUpdate(data.pointer, nextButton);
+          return;
+        }
+
+        lastPointerButton.current = nextButton;
+        emitPointerUpdate(data.pointer, nextButton);
+        return;
+      }
+
+      sendPointerUpdate(data.pointer, nextButton);
     },
-    [sendPointerUpdate]
+    [emitPointerUpdate, sendPointerUpdate]
   );
 
   const handleScrollChange = useCallback((scrollX, scrollY, zoom) => {
@@ -895,10 +1075,32 @@ export default function WhiteboardPage() {
   const toggleToolbar = useCallback(() => {
     setIsToolbarCollapsed((value) => !value);
     setIsUsersListOpen(false);
+    setIsRoomHistoryOpen(false);
   }, []);
 
   const toggleUsersList = useCallback(() => {
     setIsUsersListOpen((value) => !value);
+    setIsRoomHistoryOpen(false);
+  }, []);
+
+  const toggleRoomHistory = useCallback(() => {
+    setRoomHistory(readRoomHistory());
+    setIsRoomHistoryOpen((value) => !value);
+    setIsUsersListOpen(false);
+  }, []);
+
+  const openHistoryRoom = useCallback((nextRoomId) => {
+    if (!isValidRoomId(nextRoomId) || nextRoomId === roomId.current) {
+      setIsRoomHistoryOpen(false);
+      return;
+    }
+
+    window.location.assign(getRoomUrl(nextRoomId));
+  }, []);
+
+  const handleClearRoomHistory = useCallback(() => {
+    clearRoomHistory();
+    setRoomHistory(saveRoomToHistory(roomId.current));
   }, []);
 
   return (
@@ -982,6 +1184,68 @@ export default function WhiteboardPage() {
 
           <div className="collab-status">
             {usersWithColors.length} online / {connectionLabel}
+          </div>
+
+          <div className="collab-history-wrap">
+            <button
+              aria-expanded={isRoomHistoryOpen}
+              aria-label="Show room history"
+              className="collab-button"
+              type="button"
+              onClick={toggleRoomHistory}
+            >
+              Rooms
+            </button>
+
+            {isRoomHistoryOpen && (
+              <div className="collab-history-popover">
+                <div className="collab-history-title">
+                  <span>Room history</span>
+                  <strong>{roomHistory.length}</strong>
+                </div>
+
+                <div className="collab-history-list">
+                  {roomHistory.map((room) => {
+                    const isCurrentRoom = room.roomId === roomId.current;
+
+                    return (
+                      <button
+                        className={`collab-history-row ${
+                          isCurrentRoom ? "is-current" : ""
+                        }`}
+                        disabled={isCurrentRoom}
+                        key={room.roomId}
+                        type="button"
+                        onClick={() => openHistoryRoom(room.roomId)}
+                      >
+                        <span className="collab-history-main">
+                          <strong>{room.shortId}</strong>
+                          <span>
+                            {isCurrentRoom
+                              ? "Current room"
+                              : formatRoomVisitedAt(room.lastVisitedAt)}
+                          </span>
+                        </span>
+
+                        <span className="collab-history-count">
+                          {room.visitCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {canClearRoomHistory && (
+                  <button
+                    className="collab-history-clear"
+                    type="button"
+                    onClick={handleClearRoomHistory}
+                  >
+                    Clear old rooms
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <button className="collab-button" type="button" onClick={copyRoomLink}>
